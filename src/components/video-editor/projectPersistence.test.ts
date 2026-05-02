@@ -137,6 +137,110 @@ describe("projectPersistence media compatibility", () => {
 		expect(editor.annotationRegions[1].blurData?.blockSize).toBe(4);
 	});
 
+	it("normalizes figure region kind and fill safely", () => {
+		const baseRegion = {
+			startMs: 0,
+			endMs: 500,
+			type: "figure" as const,
+			content: "",
+			position: { x: 10, y: 10 },
+			size: { width: 20, height: 20 },
+			style: {
+				color: "#fff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold" as const,
+				fontStyle: "normal" as const,
+				textDecoration: "none" as const,
+				textAlign: "center" as const,
+			},
+		};
+
+		const editor = normalizeProjectEditor({
+			annotationRegions: [
+				// Legacy arrow with no kind field — must default to "arrow".
+				{
+					...baseRegion,
+					id: "annotation-1",
+					zIndex: 1,
+					figureData: {
+						arrowDirection: "right",
+						color: "#34B27B",
+						strokeWidth: 4,
+					},
+				},
+				// Tampered kind — must fall back to "arrow", not propagate.
+				{
+					...baseRegion,
+					id: "annotation-2",
+					zIndex: 2,
+					figureData: {
+						kind: "garbage" as never,
+						arrowDirection: "right",
+						color: "#34B27B",
+						strokeWidth: 4,
+					},
+				},
+				// Valid rectangle with valid 8-digit fill — preserved verbatim.
+				{
+					...baseRegion,
+					id: "annotation-3",
+					zIndex: 3,
+					figureData: {
+						kind: "rectangle" as const,
+						arrowDirection: "right" as const,
+						color: "#34B27B",
+						strokeWidth: 4,
+						fill: "#34b27b33",
+					},
+				},
+				// Valid ellipse with malformed fill — fill must drop to undefined,
+				// other fields preserved.
+				{
+					...baseRegion,
+					id: "annotation-4",
+					zIndex: 4,
+					figureData: {
+						kind: "ellipse" as const,
+						arrowDirection: "right" as const,
+						color: "#34B27B",
+						strokeWidth: 4,
+						fill: "not-a-hex" as never,
+					},
+				},
+				// Non-string fill — must drop to undefined without throwing.
+				{
+					...baseRegion,
+					id: "annotation-5",
+					zIndex: 5,
+					figureData: {
+						kind: "rectangle" as const,
+						arrowDirection: "right" as const,
+						color: "#34B27B",
+						strokeWidth: 4,
+						fill: 0xff0000 as never,
+					},
+				},
+			],
+		});
+
+		expect(editor.annotationRegions[0].figureData?.kind).toBe("arrow");
+		expect(editor.annotationRegions[0].figureData?.fill).toBeUndefined();
+
+		expect(editor.annotationRegions[1].figureData?.kind).toBe("arrow");
+
+		expect(editor.annotationRegions[2].figureData?.kind).toBe("rectangle");
+		expect(editor.annotationRegions[2].figureData?.fill).toBe("#34b27b33");
+
+		expect(editor.annotationRegions[3].figureData?.kind).toBe("ellipse");
+		expect(editor.annotationRegions[3].figureData?.fill).toBeUndefined();
+		expect(editor.annotationRegions[3].figureData?.color).toBe("#34B27B");
+		expect(editor.annotationRegions[3].figureData?.strokeWidth).toBe(4);
+
+		expect(editor.annotationRegions[4].figureData?.fill).toBeUndefined();
+	});
+
 	it("accepts the dual frame webcam layout preset", () => {
 		expect(normalizeProjectEditor({ webcamLayoutPreset: "dual-frame" }).webcamLayoutPreset).toBe(
 			"dual-frame",
